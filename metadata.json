@@ -1,0 +1,5 @@
+{
+  "name": "UI2GA",
+  "description": "AI-powered UI analysis tool with region selection and multilingual support for GA tagging.",
+  "requestFramePermissions": []
+}
