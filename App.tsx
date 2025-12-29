@@ -473,7 +473,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen bg-[#f8f9fb] flex flex-col font-sans text-slate-900 overflow-hidden">
+    <div className="h-screen bg-[#f8f9fb] flex flex-col font-sans text-slate-900 overflow-hidden relative">
       <ConfirmationModal
         isOpen={isResetModalOpen}
         message={language === 'ko' 
@@ -540,7 +540,12 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 overflow-hidden relative">
+      {/* Seamless Copyright - Absolute positioned on background, z-0 to sit behind content panels but visible in gaps */}
+      <div className="absolute bottom-2 right-4 z-0 pointer-events-none mix-blend-multiply opacity-50 select-none">
+        <p className="text-[10px] text-slate-400 font-medium">© 2025 Sangjin Lee / UI2GA. All Rights Reserved. (Personal Project)</p>
+      </div>
+
+      <main className="flex-1 overflow-hidden relative z-10">
         {screenshots.length === 0 ? (
           <div className="max-w-4xl mx-auto px-6 py-20 flex flex-col items-center overflow-y-auto h-full">
             <div className="text-center mb-12">
@@ -566,7 +571,7 @@ const App: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="flex h-full p-4 md:p-2 xl:p-4 overflow-hidden relative">
+          <div className="flex h-full p-4 md:p-2 xl:p-4 pb-8 md:pb-8 xl:pb-8 overflow-hidden relative">
             {/* Sliding Sidebar */}
             <div 
                 className={`
