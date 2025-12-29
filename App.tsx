@@ -8,10 +8,21 @@ import { analyzeImage } from './services/geminiService';
 import { ParsedAnalysis, Language, SelectionRect, Screenshot, ProjectContext, TaggingEvent, OverlayAnnotation, ScreenAnalysis, ViewState } from './types';
 import { getTexts } from './utils/localization';
 
+const DATA_PLAYBOOK_URL = "https://frill-purchase-4a6.notion.site/2cd425944d448013a824ccde7dfdc93d";
+const INTERNAL_STORAGE_KEY = "is_internal_user";
+
 const App: React.FC = () => {
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [activeScreenshotId, setActiveScreenshotId] = useState<string | null>(null);
   
+  // Internal User Mode State
+  const [isInternalUser, setIsInternalUser] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(INTERNAL_STORAGE_KEY) === "true";
+    }
+    return false;
+  });
+
   // Multi-selection and Region State
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selections, setSelections] = useState<Record<string, SelectionRect>>({});
@@ -48,14 +59,21 @@ const App: React.FC = () => {
   
   const t = getTexts(language);
 
+  // Effect to handle internal user activation via URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('org') === 'n2') {
+      setIsInternalUser(true);
+      localStorage.setItem(INTERNAL_STORAGE_KEY, "true");
+    }
+  }, []);
+
   const activeContext = activeScreenshotId 
     ? screenContexts[activeScreenshotId] || { customRules: '', existingTags: '' } 
     : { customRules: '', existingTags: '' };
 
-  // Current active selection based on ID
   const activeSelection = activeScreenshotId ? selections[activeScreenshotId] : undefined;
 
-  // Animation for "Analyzing..." dots
   useEffect(() => {
     let interval: number;
     if (isAnalyzing) {
@@ -68,7 +86,6 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [isAnalyzing]);
 
-  // Reset hovered item when active screenshot changes
   useEffect(() => {
     setHoveredItemNo(null);
   }, [activeScreenshotId]);
@@ -123,7 +140,6 @@ const App: React.FC = () => {
           return next;
       });
       
-      // Default selection rule: If list was empty, select the top one only.
       if (screenshots.length === 0 && loaded.length > 0) {
         setActiveScreenshotId(loaded[0].id);
         setSelectedIds(new Set([loaded[0].id]));
@@ -149,7 +165,6 @@ const App: React.FC = () => {
   };
 
   const handleAnalyze = async () => {
-    // Immediate Hard Stop
     if (isAnalyzing) {
         if (analysisController.current) {
             analysisController.current.abort();
@@ -159,20 +174,16 @@ const App: React.FC = () => {
 
     if (selectedIds.size === 0) return;
 
-    // Start Analysis
     setIsAnalyzing(true);
     setError(null);
     setAnalysisFeedback(null);
     
-    // Create new controller for this batch
     const ac = new AbortController();
     analysisController.current = ac;
     
-    // Sort screenshots to match list order
     const targets = screenshots.filter(s => selectedIds.has(s.id));
     const processedIds = new Set<string>();
 
-    // Reset canceled/failed state for selected targets before starting
     setCanceledIds(prev => {
       const next = new Set(prev);
       targets.forEach(t => next.delete(t.id));
@@ -181,18 +192,14 @@ const App: React.FC = () => {
 
     try {
       for (const target of targets) {
-          // Check signal before starting loop iteration
           if (ac.signal.aborted) break;
 
           setCurrentAnalyzingId(target.id);
 
-          // Determine specific context and selection for this screenshot
           const context = screenContexts[target.id] || { customRules: '', existingTags: '' };
           const targetSelection = selections[target.id];
 
           try {
-              // Pass the signal to the service
-              // The service uses Promise.race to ensure this throws IMMEDIATELY upon abort
               const response = await analyzeImage(
                   [target],
                   language, 
@@ -203,10 +210,8 @@ const App: React.FC = () => {
                   ac.signal
               );
 
-              // Double check signal after await (redundant if service throws, but safe)
               if (ac.signal.aborted) break;
 
-              // Update results only if successful
               if (response.results && response.results[target.id]) {
                    const data = response.results[target.id];
                    setResults(prev => {
@@ -217,14 +222,10 @@ const App: React.FC = () => {
                    processedIds.add(target.id);
               }
           } catch (e: any) {
-              // Check if it's an abort error
               if (e.name === 'AbortError' || ac.signal.aborted) {
-                  // Break outer loop immediately
                   break;
               }
-              // Handle individual non-abort errors (e.g. API error)
               console.error(e);
-              // For individual failures, we don't add to processedIds, so they become "Canceled/Failed"
           }
           
           setCurrentAnalyzingId(null);
@@ -237,8 +238,6 @@ const App: React.FC = () => {
       setIsAnalyzing(false);
       setCurrentAnalyzingId(null);
       
-      // Calculate which items were not processed (Canceled)
-      // This includes the one that was in-progress when aborted
       if (analysisController.current?.signal.aborted) {
           setCanceledIds(prev => {
               const next = new Set(prev);
@@ -255,7 +254,6 @@ const App: React.FC = () => {
             .replace('{total}', targets.length.toString());
           setAnalysisFeedback(msg);
       } else if (processedIds.size !== targets.length && !error) {
-          // Case where errors occurred but not explicitly aborted
           setCanceledIds(prev => {
               const next = new Set(prev);
               targets.forEach(t => {
@@ -263,8 +261,6 @@ const App: React.FC = () => {
               });
               return next;
           });
-      } else {
-          setAnalysisFeedback(null);
       }
       
       analysisController.current = null;
@@ -296,39 +292,32 @@ const App: React.FC = () => {
 
   const handleDeleteScreenshot = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    
     setScreenshots(prev => prev.filter(s => s.id !== id));
-    
     setResults(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
     });
-    
     setScreenContexts(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
     });
-
     setViewStates(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
     });
-    
     setSelections(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
     });
-    
     setSelectedIds(prev => {
         const next = new Set(prev);
         next.delete(id);
         return next;
     });
-    
     setCanceledIds(prev => {
         const next = new Set(prev);
         next.delete(id);
@@ -338,7 +327,6 @@ const App: React.FC = () => {
     if (activeScreenshotId === id) {
         setActiveScreenshotId(null);
     }
-    
     setScreenshotDeleteId(null);
   };
 
@@ -453,19 +441,16 @@ const App: React.FC = () => {
   const activeResult = activeScreenshotId ? results[activeScreenshotId] : undefined;
   const activeViewState = activeScreenshotId ? viewStates[activeScreenshotId] : undefined;
 
-  // Analysis Button Logic
   const canAnalyze = selectedIds.size > 0;
   
   const getAnalyzeSummary = () => {
     if (selectedIds.size === 0) return t.noSelection;
-    
     let partial = 0;
     let full = 0;
     selectedIds.forEach(id => {
         if (selections[id]) partial++;
         else full++;
     });
-    
     return t.analyzeSummary
       .replace('{total}', selectedIds.size.toString())
       .replace('{partial}', partial.toString())
@@ -506,15 +491,17 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-4">
-           <a 
-             href="https://frill-purchase-4a6.notion.site/2cd425944d448013a824ccde7dfdc93d"
-             target="_blank"
-             rel="noopener noreferrer"
-             className="flex items-center gap-2 text-[11px] font-bold text-slate-600 hover:text-[#4f46e5] transition-colors"
-           >
-             <BookOpen className="w-4 h-4" />
-             데이터 플레이북
-           </a>
+           {isInternalUser && (
+             <a 
+               href={DATA_PLAYBOOK_URL}
+               target="_blank"
+               rel="noopener noreferrer"
+               className="flex items-center gap-2 text-[11px] font-bold text-slate-600 hover:text-[#4f46e5] transition-colors"
+             >
+               <BookOpen className="w-4 h-4" />
+               데이터 플레이북
+             </a>
+           )}
 
            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
              <Globe className="w-3.5 h-3.5 text-slate-400" />
@@ -540,9 +527,9 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Seamless Copyright - Absolute positioned on background, z-0 to sit behind content panels but visible in gaps */}
+      {/* Seamless Copyright - Absolute positioned on background */}
       <div className="absolute bottom-2 right-4 z-0 pointer-events-none mix-blend-multiply opacity-50 select-none">
-        <p className="text-[10px] text-slate-400 font-medium">© 2025 Sangjin Lee / UI2GA. All Rights Reserved. (Personal Project)</p>
+        <p className="text-[10px] text-slate-400 font-medium">© 2025 Sangjin Lee / UI2GA. Personal Project.</p>
       </div>
 
       <main className="flex-1 overflow-hidden relative z-10">
@@ -587,7 +574,6 @@ const App: React.FC = () => {
             >
                 <div className="w-72 flex flex-col gap-4 h-full shrink-0">
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden h-[40%]">
-                        {/* Sidebar Header with Select All */}
                         <div className="px-4 py-3 bg-white border-b border-slate-100 flex justify-between items-center shrink-0">
                             <div className="flex items-center gap-2">
                                 <div 
@@ -620,7 +606,6 @@ const App: React.FC = () => {
                                         ${activeScreenshotId === s.id ? 'border-[#4f46e5] bg-indigo-50/50 ring-1 ring-[#4f46e5]' : 'border-slate-100 hover:border-slate-300'}
                                     `}
                                 >
-                                    {/* Item Checkbox */}
                                     <div 
                                         onClick={(e) => { e.stopPropagation(); toggleSelection(s.id); }}
                                         className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center cursor-pointer transition-colors
@@ -637,14 +622,10 @@ const App: React.FC = () => {
                                         <p className={`text-[11px] font-bold truncate ${activeScreenshotId === s.id ? 'text-[#4f46e5]' : 'text-slate-700'}`}>{s.name}</p>
                                         <div className="flex items-center gap-1.5">
                                             <p className="text-[9px] text-slate-400 font-bold font-mono tracking-wider">{s.id}</p>
-                                            {/* Selection Indicator Removed */}
                                         </div>
                                     </div>
 
-                                    {/* Right Side Status Dots */}
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-                                         {/* Status Indicators Logic */}
-                                         {/* Prioritize: Yellow (Running) > Red (Canceled/Error) > Green (Done) */}
                                          {currentAnalyzingId === s.id ? (
                                              <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse ring-2 ring-yellow-100" title="Analyzing..."></div>
                                          ) : canceledIds.has(s.id) ? (
@@ -654,7 +635,6 @@ const App: React.FC = () => {
                                          ) : null}
                                     </div>
                                     
-                                    {/* Delete Action Overlay (Higher z-index/priority on hover) */}
                                     <div 
                                         className={`absolute right-2 top-1/2 -translate-y-1/2 items-center gap-1 z-10
                                             ${screenshotDeleteId === s.id ? 'flex' : 'hidden group-hover:flex'}
@@ -720,7 +700,6 @@ const App: React.FC = () => {
                 </div>
             </div>
 
-            {/* Backdrop for Tablet sidebar dismissal */}
             {isSidebarOpen && (
                  <div 
                     className="absolute inset-0 z-30 bg-transparent xl:hidden"
@@ -781,8 +760,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Right Sidebar - Responsive Width for Tablet Optimization */}
-                {/* Changed md:w-[400px] to md:w-[480px] */}
                 <div className="w-full md:w-[480px] xl:w-[600px] shrink-0 h-full overflow-hidden">
                     {error ? (
                         <div className="bg-white border border-slate-200 rounded-xl flex flex-col items-center justify-center h-full p-10 text-center">
