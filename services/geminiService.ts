@@ -198,6 +198,26 @@ RESPONSE FORMAT (STRICT JSON ONLY)
 \`\`\`
 `;
 
+// Helper to safely get the API key from various environment locations
+const getApiKey = (): string | undefined => {
+  // 1. Vite (Standard for Vercel React deployments)
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+    // @ts-ignore
+    return import.meta.env.VITE_API_KEY;
+  }
+  
+  // 2. Standard process.env (Node / Webpack / fallback)
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+    if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
+    if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
+    if (process.env.API_KEY) return process.env.API_KEY;
+  }
+
+  return undefined;
+};
+
 export const analyzeImage = async (
   screenshots: Screenshot[],
   language: Language,
@@ -207,11 +227,13 @@ export const analyzeImage = async (
   selection?: SelectionRect,
   signal?: AbortSignal
 ): Promise<ParsedAnalysis> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing. Please set process.env.API_KEY.");
+  const apiKey = getApiKey();
+
+  if (!apiKey) {
+    throw new Error("API Key is missing. Please set VITE_API_KEY in your Vercel Environment Variables.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
   
   const screenshotMapping = screenshots.map((s, i) => `Image Index ${i} = ID: ${s.id}`).join('\n');
   
