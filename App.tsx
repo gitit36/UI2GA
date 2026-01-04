@@ -12,6 +12,26 @@ import { getTexts } from './utils/localization';
 const DATA_PLAYBOOK_URL = "https://frill-purchase-4a6.notion.site/2cd425944d448013a824ccde7dfdc93d";
 const INTERNAL_STORAGE_KEY = "is_internal_user";
 
+// Helper to convert Base64 DataURL to File object
+const dataUrlToFile = (dataUrl: string, fileName: string): File | null => {
+  try {
+    const arr = dataUrl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) return null;
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], fileName, { type: mime });
+  } catch (e) {
+    console.error("Failed to convert dataUrl to File:", e);
+    return null;
+  }
+};
+
 const App: React.FC = () => {
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [activeScreenshotId, setActiveScreenshotId] = useState<string | null>(null);
@@ -49,27 +69,6 @@ const App: React.FC = () => {
   
   const t = getTexts(language);
 
-  // Temporary Debug Handler for Figma Communication
-  useEffect(() => {
-    const handleFigmaDebugMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === "UI2GA_IMPORT_IMAGE_BASE64") {
-        const { payload } = event.data;
-        
-        // Debug Logging
-        console.log("Figma Communication Received:", {
-          screenshotName: payload?.screenshotName,
-          dataUrlLength: payload?.dataUrl?.length
-        });
-
-        // UI Notification
-        setFigmaNotice("Image received from Figma plugin");
-        setTimeout(() => setFigmaNotice(null), 3000);
-      }
-    };
-    window.addEventListener("message", handleFigmaDebugMessage);
-    return () => window.removeEventListener("message", handleFigmaDebugMessage);
-  }, []);
-
   const processNewScreenshots = useCallback((newItems: Screenshot[]) => {
     setScreenshots(prev => {
       const updated = [...prev, ...newItems];
@@ -89,6 +88,63 @@ const App: React.FC = () => {
     });
   }, []);
 
+  // Shared ingestion handler for both manual upload and Figma import
+  const handleImagesSelected = useCallback((files: File[]) => {
+    setScreenshots(prevScreenshots => {
+      const startCount = prevScreenshots.length;
+      const newScreenshotPromises: Promise<Screenshot>[] = files.map((file, index) => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+             const sequentialId = `A${(startCount + index + 1).toString().padStart(4, '0')}`;
+             resolve({
+               id: sequentialId,
+               name: file.name,
+               base64: e.target?.result as string
+             });
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+      
+      Promise.all(newScreenshotPromises).then(loaded => {
+        processNewScreenshots(loaded);
+      });
+      
+      return prevScreenshots; // Screenshots state is updated in the .then() block
+    });
+  }, [processNewScreenshots]);
+
+  // Handle Figma Communication (type: UI2GA_IMPORT_IMAGE_BASE64)
+  useEffect(() => {
+    const handleFigmaImport = (event: MessageEvent) => {
+      // Validate by message type and structure only (origin may be "null")
+      if (event.data && event.data.type === "UI2GA_IMPORT_IMAGE_BASE64") {
+        const { payload } = event.data;
+        const dataUrl = payload?.dataUrl;
+        const screenshotName = payload?.screenshotName || `Figma_${Date.now()}`;
+
+        if (!dataUrl || !dataUrl.startsWith('data:image')) {
+          console.error("Invalid Figma payload received:", payload);
+          setFigmaNotice("Import failed: Invalid image data");
+          setTimeout(() => setFigmaNotice(null), 3000);
+          return;
+        }
+
+        const file = dataUrlToFile(dataUrl, screenshotName);
+        if (file) {
+          console.log("Figma Import Success:", screenshotName);
+          handleImagesSelected([file]);
+          setFigmaNotice(language === 'ko' ? "Figma에서 이미지를 가져왔습니다" : "Imported from Figma");
+          setTimeout(() => setFigmaNotice(null), 3000);
+        }
+      }
+    };
+
+    window.addEventListener("message", handleFigmaImport);
+    return () => window.removeEventListener("message", handleFigmaImport);
+  }, [handleImagesSelected, language]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('org') === 'n2') {
@@ -97,6 +153,7 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Handle Legacy/Alternative Figma Message format if applicable
   useEffect(() => {
     const handleFigmaMessage = (event: MessageEvent) => {
       const { pluginMessage } = event.data;
@@ -159,27 +216,6 @@ const App: React.FC = () => {
               [field]: value
           }
       }));
-  };
-
-  const handleImagesSelected = (files: File[]) => {
-    const startCount = screenshots.length;
-    const newScreenshotPromises: Promise<Screenshot>[] = files.map((file, index) => {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-           const sequentialId = `A${(startCount + index + 1).toString().padStart(4, '0')}`;
-           resolve({
-             id: sequentialId,
-             name: file.name,
-             base64: e.target?.result as string
-           });
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-    Promise.all(newScreenshotPromises).then(loaded => {
-      processNewScreenshots(loaded);
-    });
   };
 
   const toggleSelection = (id: string) => {
