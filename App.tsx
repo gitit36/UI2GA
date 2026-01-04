@@ -1,5 +1,6 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Loader2, LayoutDashboard, AlertCircle, Play, Globe, Plus, FileJson, BookOpen, PanelLeft, Trash2, Check, X, Square } from 'lucide-react';
+import { Loader2, LayoutDashboard, AlertCircle, Play, Globe, Plus, FileJson, BookOpen, PanelLeft, Trash2, Check, X, Square, Figma } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import ImageWorkspace from './components/ImageWorkspace';
 import AnalysisResult from './components/AnalysisResult';
@@ -56,8 +57,32 @@ const App: React.FC = () => {
 
   // Screenshot Deletion State
   const [screenshotDeleteId, setScreenshotDeleteId] = useState<string | null>(null);
+
+  // Figma Import Debug Notification State
+  const [figmaNotice, setFigmaNotice] = useState<string | null>(null);
   
   const t = getTexts(language);
+
+  // Helper to process new screenshots regardless of source
+  const processNewScreenshots = useCallback((newItems: Screenshot[]) => {
+    setScreenshots(prev => {
+      const updated = [...prev, ...newItems];
+      // If list was empty, select the first newly added one
+      if (prev.length === 0 && newItems.length > 0) {
+        setActiveScreenshotId(newItems[0].id);
+        setSelectedIds(new Set([newItems[0].id]));
+      }
+      return updated;
+    });
+
+    setScreenContexts(prev => {
+      const next = { ...prev };
+      newItems.forEach(s => {
+        if (!next[s.id]) next[s.id] = { customRules: '', existingTags: '' };
+      });
+      return next;
+    });
+  }, []);
 
   // Effect to handle internal user activation via URL params
   useEffect(() => {
@@ -67,6 +92,55 @@ const App: React.FC = () => {
       localStorage.setItem(INTERNAL_STORAGE_KEY, "true");
     }
   }, []);
+
+  // Temporary Message Listener for Figma Debugging
+  useEffect(() => {
+    const handleFigmaDebugMessage = (event: MessageEvent) => {
+      // Check for the specific debug type requested
+      if (event.data && event.data.type === "UI2GA_IMPORT_IMAGE_BASE64") {
+        const { payload } = event.data;
+        
+        // Log requirements
+        console.log("--- Figma Import Message Received ---");
+        console.log("Screenshot Name:", payload?.screenshotName);
+        console.log("Data URL Length:", payload?.dataUrl?.length);
+        
+        // Show notification
+        setFigmaNotice("Image received from Figma plugin");
+        
+        // Auto-hide after 3 seconds
+        setTimeout(() => setFigmaNotice(null), 3000);
+      }
+    };
+
+    window.addEventListener("message", handleFigmaDebugMessage);
+    return () => window.removeEventListener("message", handleFigmaDebugMessage);
+  }, []);
+
+  // Effect for Figma Integration (Existing logic for pluginMessage format)
+  useEffect(() => {
+    const handleFigmaMessage = (event: MessageEvent) => {
+      const { pluginMessage } = event.data;
+      if (!pluginMessage) return;
+
+      // Handle receiving image from Figma
+      if (pluginMessage.type === 'UI2GA_FIGMA_IMAGE') {
+        const { data, name } = pluginMessage;
+        const sequentialId = `F${(screenshots.length + 1).toString().padStart(4, '0')}`;
+        
+        const newScreenshot: Screenshot = {
+          id: sequentialId,
+          name: name || 'Figma Frame',
+          base64: data.startsWith('data:') ? data : `data:image/png;base64,${data}`
+        };
+        
+        processNewScreenshots([newScreenshot]);
+      }
+    };
+
+    window.addEventListener('message', handleFigmaMessage);
+    return () => window.removeEventListener('message', handleFigmaMessage);
+  }, [screenshots.length, processNewScreenshots]);
 
   const activeContext = activeScreenshotId 
     ? screenContexts[activeScreenshotId] || { customRules: '', existingTags: '' } 
@@ -115,7 +189,7 @@ const App: React.FC = () => {
 
   const handleImagesSelected = (files: File[]) => {
     const startCount = screenshots.length;
-    const newScreenshots: Promise<Screenshot>[] = files.map((file, index) => {
+    const newScreenshotPromises: Promise<Screenshot>[] = files.map((file, index) => {
       return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -130,20 +204,8 @@ const App: React.FC = () => {
       });
     });
 
-    Promise.all(newScreenshots).then(loaded => {
-      setScreenshots(prev => [...prev, ...loaded]);
-      setScreenContexts(prev => {
-          const next = { ...prev };
-          loaded.forEach(s => {
-              if (!next[s.id]) next[s.id] = { customRules: '', existingTags: '' };
-          });
-          return next;
-      });
-      
-      if (screenshots.length === 0 && loaded.length > 0) {
-        setActiveScreenshotId(loaded[0].id);
-        setSelectedIds(new Set([loaded[0].id]));
-      }
+    Promise.all(newScreenshotPromises).then(loaded => {
+      processNewScreenshots(loaded);
     });
   };
 
@@ -471,6 +533,16 @@ const App: React.FC = () => {
         onCancel={cancelReset}
       />
 
+      {/* Figma Import Toast */}
+      {figmaNotice && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-[#4f46e5] text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 border border-white/20 backdrop-blur-sm">
+            <Figma className="w-5 h-5 fill-current" />
+            <span className="text-sm font-bold">{figmaNotice}</span>
+          </div>
+        </div>
+      )}
+
       <header className="bg-white border-b border-slate-200 h-14 px-5 flex items-center justify-between shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-3">
             {screenshots.length > 0 && (
@@ -527,7 +599,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Seamless Copyright - Absolute positioned on background */}
+      {/* Seamless Copyright */}
       <div className="absolute bottom-2 right-4 z-0 pointer-events-none mix-blend-multiply opacity-50 select-none">
         <p className="text-[10px] text-slate-400 font-medium">© 2025 Sangjin Lee / UI2GA. Personal Project.</p>
       </div>
@@ -559,7 +631,6 @@ const App: React.FC = () => {
           </div>
         ) : (
           <div className="flex h-full p-4 md:p-2 xl:p-4 pb-8 md:pb-8 xl:pb-8 overflow-hidden relative">
-            {/* Sliding Sidebar */}
             <div 
                 className={`
                     transition-all duration-300 ease-in-out flex flex-col gap-4 overflow-hidden h-full z-40
@@ -650,7 +721,7 @@ const App: React.FC = () => {
                                                     <X className="w-3 h-3" />
                                                 </button>
                                                 <button 
-                                                    onClick={(e) => handleDeleteScreenshot(s.id, e)}
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteScreenshot(s.id, e); }}
                                                     className="p-1.5 bg-red-500 rounded-md hover:bg-red-600 text-white transition-colors"
                                                 >
                                                     <Check className="w-3 h-3" />
