@@ -49,6 +49,27 @@ const App: React.FC = () => {
   
   const t = getTexts(language);
 
+  // Temporary Debug Handler for Figma Communication
+  useEffect(() => {
+    const handleFigmaDebugMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === "UI2GA_IMPORT_IMAGE_BASE64") {
+        const { payload } = event.data;
+        
+        // Debug Logging
+        console.log("Figma Communication Received:", {
+          screenshotName: payload?.screenshotName,
+          dataUrlLength: payload?.dataUrl?.length
+        });
+
+        // UI Notification
+        setFigmaNotice("Image received from Figma plugin");
+        setTimeout(() => setFigmaNotice(null), 3000);
+      }
+    };
+    window.addEventListener("message", handleFigmaDebugMessage);
+    return () => window.removeEventListener("message", handleFigmaDebugMessage);
+  }, []);
+
   const processNewScreenshots = useCallback((newItems: Screenshot[]) => {
     setScreenshots(prev => {
       const updated = [...prev, ...newItems];
@@ -74,17 +95,6 @@ const App: React.FC = () => {
       setIsInternalUser(true);
       localStorage.setItem(INTERNAL_STORAGE_KEY, "true");
     }
-  }, []);
-
-  useEffect(() => {
-    const handleFigmaDebugMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === "UI2GA_IMPORT_IMAGE_BASE64") {
-        setFigmaNotice("Image received from Figma plugin");
-        setTimeout(() => setFigmaNotice(null), 3000);
-      }
-    };
-    window.addEventListener("message", handleFigmaDebugMessage);
-    return () => window.removeEventListener("message", handleFigmaDebugMessage);
   }, []);
 
   useEffect(() => {
