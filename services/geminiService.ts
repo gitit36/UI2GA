@@ -1,11 +1,12 @@
 
-// Fix: Updated imports to include Type for responseSchema
-import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { ParsedAnalysis, ScreenAnalysis, Language, SelectionRect, Screenshot, ProjectContext } from "../types";
 
 const generateSystemInstruction = (
   language: Language, 
-  context: ProjectContext
+  screenshots: Screenshot[],
+  context: ProjectContext,
+  selection?: SelectionRect
 ) => `
 You are UI2GA, a world-class GA4 Tagging Architect specialized in
 Korean-first enterprise analytics standards.
@@ -35,22 +36,14 @@ export const analyzeImage = async (
   selection?: SelectionRect,
   signal?: AbortSignal
 ): Promise<ParsedAnalysis> => {
-  // Use the required environment variable
-  const apiKey = process.env.API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("MISSING_API_KEY");
-  }
-
-  // Create instance inside the function as recommended to ensure latest key is used
-  const ai = new GoogleGenAI({ apiKey });
+  // Directly use the environment variable as per guidelines
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const screenshotMapping = screenshots.map((s, i) => `Image Index ${i} = ID: ${s.id}`).join('\n');
-  // Fix: Move system instruction to model config
-  const systemInstruction = generateSystemInstruction(language, context);
+  const systemInstruction = generateSystemInstruction(language, screenshots, context, selection);
   
   const parts: any[] = [
-    { text: `Analyze the provided images for GA4 tagging. \n\nIMAGE ID MAPPING:\n${screenshotMapping}` }
+    { text: systemInstruction + `\n\nIMAGE ID MAPPING:\n${screenshotMapping}` }
   ];
 
   screenshots.forEach(s => {
@@ -69,87 +62,26 @@ export const analyzeImage = async (
   }
 
   try {
-    // Fix: Using systemInstruction in config and adding responseSchema
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: { parts },
       config: { 
-        systemInstruction,
         temperature: 0.1,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            screens: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  screenshot_id: { type: Type.STRING },
-                  events: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        item_no: { type: Type.INTEGER },
-                        event_category: { type: Type.STRING },
-                        event_action: { type: Type.STRING },
-                        event_label: { type: Type.STRING },
-                        description: { type: Type.STRING }
-                      },
-                      required: ["item_no", "event_category", "event_action", "event_label", "description"]
-                    }
-                  },
-                  annotations: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        item_no: { type: Type.INTEGER },
-                        label: { type: Type.STRING },
-                        confidence: { type: Type.NUMBER },
-                        display_priority: { type: Type.INTEGER },
-                        bbox: {
-                          type: Type.OBJECT,
-                          properties: {
-                            x: { type: Type.NUMBER },
-                            y: { type: Type.NUMBER },
-                            w: { type: Type.NUMBER },
-                            h: { type: Type.NUMBER }
-                          },
-                          required: ["x", "y", "w", "h"]
-                        }
-                      },
-                      required: ["item_no", "label", "bbox"]
-                    }
-                  }
-                },
-                required: ["screenshot_id", "events", "annotations"]
-              }
-            }
-          },
-          required: ["screens"]
-        }
+        responseMimeType: "application/json"
       } 
     });
 
     if (signal?.aborted) {
-      throw new Error("AbortError");
+      throw new Error("Aborted");
     }
 
     const text = response.text || "";
     return parseGeminiResponse(text);
 
   } catch (error: any) {
-    // Handle specific API error for key re-selection as per guidelines
-    if (error?.message?.includes("Requested entity was not found")) {
-      throw new Error("ENTITY_NOT_FOUND");
-    }
-    
-    if (signal?.aborted || error?.message === "AbortError") {
+    if (signal?.aborted || error?.message === "Aborted") {
       throw new Error("AbortError");
     }
-    
     console.error("Gemini API Error:", error);
     throw error;
   }
