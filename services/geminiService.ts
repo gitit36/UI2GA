@@ -37,7 +37,7 @@ export const analyzeImage = async (
   signal?: AbortSignal
 ): Promise<ParsedAnalysis> => {
   // Directly use the environment variable as per guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.VITE_API_KEY });
   
   const screenshotMapping = screenshots.map((s, i) => `Image Index ${i} = ID: ${s.id}`).join('\n');
   const systemInstruction = generateSystemInstruction(language, screenshots, context, selection);
