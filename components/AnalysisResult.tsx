@@ -102,7 +102,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
             const tableHeight = headerHeight + (analysis.events.length * rowHeight);
             const totalHeight = tableY + tableHeight + 50; // 50px bottom padding
             
-            // Adjust table columns proportionally to SVG width
             const colWidths = {
                 no: 50,
                 cat: 150,
@@ -128,17 +127,14 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                   .grid { stroke: #e2e8f0; stroke-width: 1; }
                 </style>
                 
-                <!-- Image & Annotations -->
                 <g>
                   <image href="${activeImage.base64}" width="${imgWidth}" height="${imgHeight}" />
                   ${analysis.annotations.map(ann => {
-                    // Use actual image dimensions for bbox calculation
                     const bx = ann.bbox.x * imgWidth;
                     const by = ann.bbox.y * imgHeight;
                     const bw = ann.bbox.w * imgWidth;
                     const bh = ann.bbox.h * imgHeight;
 
-                    // Item 1 drops down (y), others go up (y - 28)
                     const isItemOne = ann.item_no === 1;
                     const tagRectY = isItemOne ? by : by - 28;
                     const tagTextY = isItemOne ? by + 20 : by - 8;
@@ -151,11 +147,8 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                   }).join('')}
                 </g>
 
-                <!-- Data Table -->
                 <g transform="translate(0, ${tableY})">
                   <rect x="0" y="0" width="${svgWidth}" height="${tableHeight}" fill="white" stroke="#e2e8f0" rx="8" />
-                  
-                  <!-- Header -->
                   <rect x="0" y="0" width="${svgWidth}" height="${headerHeight}" fill="#f8fafc" rx="8" />
                   <text x="${xPos.no}" y="30" class="header">No</text>
                   <text x="${xPos.cat}" y="30" class="header">Category</text>
@@ -164,7 +157,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                   <text x="${xPos.desc}" y="30" class="header">Description</text>
                   <line x1="0" y1="${headerHeight}" x2="${svgWidth}" y2="${headerHeight}" class="grid" />
 
-                  <!-- Rows -->
                   ${analysis.events.map((e, i) => {
                     const y = headerHeight + (i * rowHeight) + 25;
                     const lineY = headerHeight + ((i + 1) * rowHeight);
@@ -180,7 +172,20 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 </g>
               </svg>
             `.trim();
+
+            // 1. Download local file
             downloadFile(svg, `figma_export_${activeScreenshotId}.svg`, 'image/svg+xml');
+
+            // 2. Figma Round-trip Integration: Send message to parent (Figma Plugin)
+            if (window.parent !== window) {
+                window.parent.postMessage({
+                    pluginMessage: {
+                        type: 'UI2GA_WEB_TO_FIGMA_RESULT',
+                        svg: svg,
+                        screenshotId: activeScreenshotId
+                    }
+                }, '*');
+            }
         } catch (e) {
             console.error(e);
             alert("SVG Export Generation Failed");
@@ -227,7 +232,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-      {/* Header Tabs */}
       <div className="h-12 border-b border-slate-200 flex items-center justify-between px-2 shrink-0">
          <div className="flex h-full">
              <button 
@@ -262,7 +266,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
          </div>
       </div>
 
-      {/* Sub Toolbar */}
       <div className="px-4 py-2 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
           <span className="text-[10px] text-slate-400 italic font-bold">
             {activeTab === 'table' ? t.editMode : ''}
@@ -286,7 +289,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
           </div>
       </div>
 
-      {/* Table/Content Area */}
       <div className="flex-1 overflow-hidden bg-white relative">
         {activeTab === 'table' ? (
           <div className="absolute inset-0 overflow-auto custom-scrollbar">
