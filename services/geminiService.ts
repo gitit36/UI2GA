@@ -36,8 +36,15 @@ export const analyzeImage = async (
   selection?: SelectionRect,
   signal?: AbortSignal
 ): Promise<ParsedAnalysis> => {
-  // Directly use the environment variable as per guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Use the required environment variable
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("MISSING_API_KEY");
+  }
+
+  // Create instance inside the function as recommended
+  const ai = new GoogleGenAI({ apiKey });
   
   const screenshotMapping = screenshots.map((s, i) => `Image Index ${i} = ID: ${s.id}`).join('\n');
   const systemInstruction = generateSystemInstruction(language, screenshots, context, selection);
@@ -72,16 +79,22 @@ export const analyzeImage = async (
     });
 
     if (signal?.aborted) {
-      throw new Error("Aborted");
+      throw new Error("AbortError");
     }
 
     const text = response.text || "";
     return parseGeminiResponse(text);
 
   } catch (error: any) {
-    if (signal?.aborted || error?.message === "Aborted") {
+    // Handle specific API error for key re-selection
+    if (error?.message?.includes("Requested entity was not found")) {
+      throw new Error("ENTITY_NOT_FOUND");
+    }
+    
+    if (signal?.aborted || error?.message === "AbortError") {
       throw new Error("AbortError");
     }
+    
     console.error("Gemini API Error:", error);
     throw error;
   }
