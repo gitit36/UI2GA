@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Loader2, LayoutDashboard, AlertCircle, Play, Globe, Plus, FileJson, BookOpen, PanelLeft, Trash2, Check, X, Square, Figma, Key } from 'lucide-react';
+import { Loader2, LayoutDashboard, AlertCircle, Play, Globe, Plus, FileJson, BookOpen, PanelLeft, Trash2, Check, X, Square, Figma } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import ImageWorkspace from './components/ImageWorkspace';
 import AnalysisResult from './components/AnalysisResult';
@@ -12,21 +12,9 @@ import { getTexts } from './utils/localization';
 const DATA_PLAYBOOK_URL = "https://frill-purchase-4a6.notion.site/2cd425944d448013a824ccde7dfdc93d";
 const INTERNAL_STORAGE_KEY = "is_internal_user";
 
-// Declare global interface for window.aistudio to avoid conflicts with existing environment definitions.
-// Making the property optional to resolve modifier/type identity issues during merging.
-declare global {
-  interface Window {
-    aistudio?: {
-      hasSelectedApiKey: () => Promise<boolean>;
-      openSelectKey: () => Promise<void>;
-    };
-  }
-}
-
 const App: React.FC = () => {
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [activeScreenshotId, setActiveScreenshotId] = useState<string | null>(null);
-  const [hasKey, setHasKey] = useState<boolean>(true); 
   
   const [isInternalUser, setIsInternalUser] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -60,27 +48,6 @@ const App: React.FC = () => {
   const [figmaNotice, setFigmaNotice] = useState<string | null>(null);
   
   const t = getTexts(language);
-
-  useEffect(() => {
-    const checkKey = async () => {
-      if (typeof window.aistudio?.hasSelectedApiKey === 'function') {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        // Exclusively rely on process.env.API_KEY as per coding guidelines.
-        setHasKey(selected || !!process.env.API_KEY);
-      } else {
-        setHasKey(!!process.env.API_KEY);
-      }
-    };
-    checkKey();
-  }, []);
-
-  const handleOpenKeySelector = async () => {
-    if (typeof window.aistudio?.openSelectKey === 'function') {
-      await window.aistudio.openSelectKey();
-      // Proceed assuming key selection was successful as per guidelines.
-      setHasKey(true);
-    }
-  };
 
   const processNewScreenshots = useCallback((newItems: Screenshot[]) => {
     setScreenshots(prev => {
@@ -277,14 +244,7 @@ const App: React.FC = () => {
               if (e.name === 'AbortError' || ac.signal.aborted) break;
               
               if (e.message === "MISSING_API_KEY") {
-                  setHasKey(false);
-                  throw new Error(language === 'ko' ? "API 키가 연결되지 않았습니다. 상단 키 아이콘을 눌러주세요." : "API Key is not connected. Please click the key icon in the header.");
-              }
-              
-              if (e.message === "ENTITY_NOT_FOUND") {
-                  setHasKey(false);
-                  handleOpenKeySelector();
-                  throw new Error(language === 'ko' ? "프로젝트를 찾을 수 없습니다. API 키를 다시 선택해주세요." : "Project not found. Please re-select your API key.");
+                  throw new Error(language === 'ko' ? "API 키 설정이 누락되었습니다. 환경 변수를 확인해주세요." : "API Key is missing. Please check environment variables.");
               }
               console.error(e);
           }
@@ -438,15 +398,6 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-4">
-           {/* API Key Connection Button */}
-           <button 
-              onClick={handleOpenKeySelector}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${!hasKey ? 'bg-amber-50 border-amber-200 text-amber-600 animate-pulse' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
-           >
-             <Key className={`w-3.5 h-3.5 ${!hasKey ? 'text-amber-500' : 'text-slate-400'}`} />
-             {!hasKey ? (language === 'ko' ? 'API 키 연결 필요' : 'Connect API Key') : (language === 'ko' ? 'API 키 연결됨' : 'API Connected')}
-           </button>
-
            {isInternalUser && (
              <a href={DATA_PLAYBOOK_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-[11px] font-bold text-slate-600 hover:text-[#4f46e5] transition-colors"><BookOpen className="w-4 h-4" />데이터 플레이북</a>
            )}
