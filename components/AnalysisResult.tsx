@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ScreenAnalysis, Language, TaggingEvent, Screenshot } from '../types';
 import { getTexts } from '../utils/localization';
@@ -13,6 +14,29 @@ interface AnalysisResultProps {
   activeScreenshotId: string | null;
   activeImage?: Screenshot;
   hoveredItemNo: number | null;
+}
+
+// Robust detector for Figma plugin iframe environment
+function isInFigmaPluginIframe() {
+  try {
+    var inIframe = window.self !== window.top;
+    var ua = navigator && navigator.userAgent ? navigator.userAgent : "";
+    var uaLooksFigma = ua.indexOf("Figma") !== -1;
+    var qs = window.location && window.location.search ? window.location.search : "";
+    var qsFlag = qs.indexOf("figmaPlugin=1") !== -1;
+    return inIframe && (uaLooksFigma || qsFlag);
+  } catch (e) {
+    // If cross-origin blocks window.top access, we're likely in a restricted iframe (plugin)
+    return true;
+  }
+}
+
+// Send SVG data directly to the Figma parent plugin
+function exportToFigma(svgText: string) {
+  window.parent.postMessage(
+    { type: "UI2GA_EXPORT_SVG", payload: { svgText: svgText } },
+    "*"
+  );
 }
 
 const AnalysisResult: React.FC<AnalysisResultProps> = ({ 
@@ -31,7 +55,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
   const [tempCellValue, setTempCellValue] = useState<string>("");
   const [jsonText, setJsonText] = useState<string>("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [copyStatus, setCopyStatus] = useState<'markdown' | 'json' | null>(null);
+  const [copyStatus, setCopyStatus] = useState<'markdown' | 'json' | 'figma' | null>(null);
   const t = getTexts(language);
 
   // Sync JSON text when analysis changes (from outside)
@@ -45,7 +69,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
     const rows = analysis.events.map(e => 
       `| ${e.item_no} | ${e.event_category} | ${e.event_action} | ${e.event_label} | ${e.description} |`
     ).join('\n');
-    return `${header}\n${rows}`;
+    return header + "\n" + rows;
   };
 
   const handleUnifiedCopy = () => {
@@ -173,18 +197,19 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
               </svg>
             `.trim();
 
-            // 1. Download local file
-            downloadFile(svg, `figma_export_${activeScreenshotId}.svg`, 'image/svg+xml');
+            var isFigma = isInFigmaPluginIframe();
+            console.log("[UI2GA] Export triggered", { mode: isFigma ? "figma_iframe" : "web_download" });
 
-            // 2. Figma Round-trip Integration: Send message to parent (Figma Plugin)
-            if (window.parent !== window) {
-                window.parent.postMessage({
-                    pluginMessage: {
-                        type: 'UI2GA_WEB_TO_FIGMA_RESULT',
-                        svg: svg,
-                        screenshotId: activeScreenshotId
-                    }
-                }, '*');
+            if (isFigma) {
+                // Use specified helper for direct Figma integration
+                exportToFigma(svg);
+                
+                // Show localized success feedback
+                setCopyStatus('figma');
+                setTimeout(function() { setCopyStatus(null); }, 3000);
+            } else {
+                // Standard browser download behavior
+                downloadFile(svg, "figma_export_" + (activeScreenshotId || "data") + ".svg", 'image/svg+xml');
             }
         } catch (e) {
             console.error(e);
@@ -194,7 +219,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
   };
 
   const handleCellDoubleClick = (itemNo: number, field: keyof TaggingEvent, currentValue: any) => {
-    setEditingCell({ itemNo, field });
+    setEditingCell({ itemNo: itemNo, field: field });
     setTempCellValue(String(currentValue));
   };
 
@@ -218,7 +243,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
 
   const commitJsonEdit = () => {
     try {
-      const parsed = JSON.parse(jsonText);
+      var parsed = JSON.parse(jsonText);
       if (parsed && Array.isArray(parsed.events)) {
         onUpdateEvents(parsed.events);
         setJsonError(null);
@@ -231,19 +256,28 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+    <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm relative">
+      {copyStatus === 'figma' && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-top-2 duration-300">
+           <div className="bg-[#4f46e5] text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 border border-white/20">
+              <Check className="w-4 h-4" />
+              <span className="text-xs font-bold">{(t as any).sentToFigma || "Sent to Figma ✓"}</span>
+           </div>
+        </div>
+      )}
+
       <div className="h-12 border-b border-slate-200 flex items-center justify-between px-2 shrink-0">
          <div className="flex h-full">
              <button 
-                onClick={() => setActiveTab('table')}
-                className={`flex items-center gap-2 text-[11px] font-bold px-4 h-full border-b-2 transition-colors ${activeTab === 'table' ? 'border-[#4f46e5] text-[#4f46e5]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                onClick={function() { setActiveTab('table'); }}
+                className={"flex items-center gap-2 text-[11px] font-bold px-4 h-full border-b-2 transition-colors " + (activeTab === 'table' ? 'border-[#4f46e5] text-[#4f46e5]' : 'border-transparent text-slate-400 hover:text-slate-600')}
              >
                 <TableIcon className="w-3.5 h-3.5" />
                 {t.table}
              </button>
              <button 
-                onClick={() => setActiveTab('json')}
-                className={`flex items-center gap-2 text-[11px] font-bold px-4 h-full border-b-2 transition-colors ${activeTab === 'json' ? 'border-[#4f46e5] text-[#4f46e5]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                onClick={function() { setActiveTab('json'); }}
+                className={"flex items-center gap-2 text-[11px] font-bold px-4 h-full border-b-2 transition-colors " + (activeTab === 'json' ? 'border-[#4f46e5] text-[#4f46e5]' : 'border-transparent text-slate-400 hover:text-slate-600')}
              >
                 <Code className="w-3.5 h-3.5" />
                 {t.json}
@@ -259,9 +293,9 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
             </button>
             <div className="h-4 w-px bg-slate-200"></div>
             <div className="flex gap-2 text-[10px] text-slate-400 font-bold">
-                <button onClick={() => downloadFile(generateCSV(), `${activeScreenshotId}_tagging.csv`, 'text/csv')} className="cursor-pointer hover:text-slate-600 uppercase">CSV</button>
-                <button onClick={() => downloadFile(generateCSV(), `${activeScreenshotId}_tagging.xlsx`, 'application/vnd.ms-excel')} className="cursor-pointer hover:text-slate-600 uppercase">XLSX</button>
-                <button onClick={() => downloadFile(jsonText, `${activeScreenshotId}_tagging.json`, 'application/json')} className="cursor-pointer hover:text-slate-600 uppercase">JSON</button>
+                <button onClick={function() { downloadFile(generateCSV(), (activeScreenshotId || "data") + "_tagging.csv", 'text/csv'); }} className="cursor-pointer hover:text-slate-600 uppercase">CSV</button>
+                <button onClick={function() { downloadFile(generateCSV(), (activeScreenshotId || "data") + "_tagging.xlsx", 'application/vnd.ms-excel'); }} className="cursor-pointer hover:text-slate-600 uppercase">XLSX</button>
+                <button onClick={function() { downloadFile(jsonText, (activeScreenshotId || "data") + "_tagging.json", 'application/json'); }} className="cursor-pointer hover:text-slate-600 uppercase">JSON</button>
             </div>
          </div>
       </div>
@@ -281,10 +315,10 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
               )}
               <button 
                 onClick={handleUnifiedCopy}
-                className={`p-2 bg-white border rounded transition-colors shadow-sm flex items-center justify-center ${copyStatus ? 'border-green-500 text-green-600 bg-green-50' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                className={"p-2 bg-white border rounded transition-colors shadow-sm flex items-center justify-center " + (copyStatus && copyStatus !== 'figma' ? 'border-green-500 text-green-600 bg-green-50' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}
                 title={activeTab === 'table' ? t.copyMarkdown : t.copyJSON}
               >
-                  {copyStatus ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {(copyStatus && copyStatus !== 'figma') ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               </button>
           </div>
       </div>
@@ -304,48 +338,50 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                {analysis.events.map((event) => (
-                    <tr 
-                        key={event.item_no} 
-                        className={`hover:bg-slate-50 transition-colors group ${hoveredItemNo === event.item_no ? 'bg-indigo-50' : ''}`}
-                    >
-                    <td className="px-2 py-3 text-[11px] text-slate-400 text-center font-bold">
-                        {event.item_no}
-                    </td>
-                    
-                    {['event_category', 'event_action', 'event_label', 'description'].map((f) => {
-                        const field = f as keyof TaggingEvent;
-                        const isEditing = editingCell?.itemNo === event.item_no && editingCell?.field === field;
+                {analysis.events.map((event) => {
+                    return (
+                        <tr 
+                            key={event.item_no} 
+                            className={"hover:bg-slate-50 transition-colors group " + (hoveredItemNo === event.item_no ? 'bg-indigo-50' : '')}
+                        >
+                        <td className="px-2 py-3 text-[11px] text-slate-400 text-center font-bold">
+                            {event.item_no}
+                        </td>
                         
-                        return (
-                            <td 
-                                key={field}
-                                onDoubleClick={() => handleCellDoubleClick(event.item_no, field, event[field])}
-                                className={`px-3 py-3 text-[11px] border-l border-slate-50 cursor-text ${field === 'event_action' ? 'text-[#2563eb] font-bold' : field === 'event_label' ? 'text-[#9333ea] font-bold' : 'text-slate-800'}`}
-                            >
-                                {isEditing ? (
-                                    <input 
-                                        autoFocus
-                                        className="w-full bg-indigo-50 border border-indigo-200 outline-none px-1 rounded shadow-sm text-slate-900"
-                                        value={tempCellValue}
-                                        onChange={(e) => setTempCellValue(e.target.value)}
-                                        onBlur={commitCellEdit}
-                                        onKeyDown={handleKeyDown}
-                                    />
-                                ) : (
-                                    event[field]
-                                )}
-                            </td>
-                        );
-                    })}
+                        {['event_category', 'event_action', 'event_label', 'description'].map((f) => {
+                            var field = f as keyof TaggingEvent;
+                            var isEditing = editingCell && editingCell.itemNo === event.item_no && editingCell.field === field;
+                            
+                            return (
+                                <td 
+                                    key={field}
+                                    onDoubleClick={function() { handleCellDoubleClick(event.item_no, field, event[field]); }}
+                                    className={"px-3 py-3 text-[11px] border-l border-slate-50 cursor-text " + (field === 'event_action' ? 'text-[#2563eb] font-bold' : field === 'event_label' ? 'text-[#9333ea] font-bold' : 'text-slate-800')}
+                                >
+                                    {isEditing ? (
+                                        <input 
+                                            autoFocus
+                                            className="w-full bg-indigo-50 border border-indigo-200 outline-none px-1 rounded shadow-sm text-slate-900"
+                                            value={tempCellValue}
+                                            onChange={function(e) { setTempCellValue(e.target.value); }}
+                                            onBlur={commitCellEdit}
+                                            onKeyDown={handleKeyDown}
+                                        />
+                                    ) : (
+                                        event[field]
+                                    )}
+                                </td>
+                            );
+                        })}
 
-                    <td className="px-2 py-3 text-center">
-                        <button onClick={() => onDeleteRow(event.item_no)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
-                            <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                    </td>
-                    </tr>
-                ))}
+                        <td className="px-2 py-3 text-center">
+                            <button onClick={function() { onDeleteRow(event.item_no); }} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
+                                <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                        </td>
+                        </tr>
+                    );
+                })}
                 </tbody>
             </table>
           </div>
@@ -353,7 +389,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
           <div className="absolute inset-0 flex flex-col">
              <div className="flex-1 relative">
                 <textarea
-                    className={`w-full h-full p-4 text-[11px] font-mono leading-relaxed outline-none resize-none ${jsonError ? 'bg-red-50' : 'bg-slate-50 text-slate-700'}`}
+                    className={"w-full h-full p-4 text-[11px] font-mono leading-relaxed outline-none resize-none " + (jsonError ? 'bg-red-50' : 'bg-slate-50 text-slate-700')}
                     value={jsonText}
                     onChange={handleJsonChange}
                     onBlur={commitJsonEdit}

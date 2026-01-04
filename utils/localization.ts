@@ -1,3 +1,4 @@
+
 import { Language } from '../types';
 
 export const translations = {
@@ -36,6 +37,7 @@ export const translations = {
     deleteRow: "Delete",
     downloadAnnotated: "Annotated Image Download",
     exportFigma: "Figma export",
+    sentToFigma: "Sent to Figma ✓",
     noOverlays: "No overlays to export",
     annotationMode: "Annotation : Drag to add new tag",
     dragToSelect: "Drag to select analysis area",
@@ -88,6 +90,7 @@ export const translations = {
     deleteRow: "삭제",
     downloadAnnotated: "주석 이미지 다운로드",
     exportFigma: "Figma로 내보내기",
+    sentToFigma: "Figma로 전송됨 ✓",
     noOverlays: "내보낼 주석이 없습니다",
     annotationMode: "주석 모드: 드래그하여 새 태그 추가",
     dragToSelect: "드래그하여 분석 영역 선택",
