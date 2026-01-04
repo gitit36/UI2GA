@@ -34,15 +34,20 @@ export const analyzeImage = async (
   selection?: SelectionRect,
   signal?: AbortSignal
 ): Promise<ParsedAnalysis> => {
-  // Use the required environment variable process.env.API_KEY exclusively as per guidelines.
-  const apiKey = process.env.API_KEY;
+  /**
+   * Safe API Key retrieval:
+   * Prioritize process.env.API_KEY as per instructions, 
+   * but fall back to VITE_API_KEY for the user's specific Vercel environment.
+   */
+  const apiKey = (typeof process !== 'undefined' && process.env.API_KEY) 
+    ? process.env.API_KEY 
+    : (import.meta as any).env?.VITE_API_KEY;
   
   if (!apiKey) {
     throw new Error("MISSING_API_KEY");
   }
 
-  // Create instance inside the function as recommended to ensure latest key is used.
-  // Using gemini-3-pro-preview for complex reasoning tasks like UI analysis and GA tagging architecture.
+  // Create instance inside the function right before the call.
   const ai = new GoogleGenAI({ apiKey });
   
   const screenshotMapping = screenshots.map((s, i) => `Image Index ${i} = ID: ${s.id}`).join('\n');
@@ -139,15 +144,9 @@ export const analyzeImage = async (
     return parseGeminiResponse(text);
 
   } catch (error: any) {
-    // Check for "Requested entity was not found" error to trigger re-selection.
-    if (error?.message?.includes("Requested entity was not found")) {
-      throw new Error("ENTITY_NOT_FOUND");
-    }
-    
     if (signal?.aborted || error?.message === "AbortError") {
       throw new Error("AbortError");
     }
-    
     console.error("Gemini API Error:", error);
     throw error;
   }
