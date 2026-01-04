@@ -12,16 +12,18 @@ import { getTexts } from './utils/localization';
 const DATA_PLAYBOOK_URL = "https://frill-purchase-4a6.notion.site/2cd425944d448013a824ccde7dfdc93d";
 const INTERNAL_STORAGE_KEY = "is_internal_user";
 
-// Define the interface for AI Studio SDK to match existing global expectations
-interface AIStudio {
+// Define the interface for AI Studio SDK to match required platform capabilities
+// Renamed to _AIStudio to avoid global naming collisions
+interface _AIStudio {
   hasSelectedApiKey: () => Promise<boolean>;
   openSelectKey: () => Promise<void>;
 }
 
-// Extend global window type for AI Studio SDK. Use AIStudio interface to avoid conflicts.
+// Extend global window type for AI Studio SDK
 declare global {
   interface Window {
-    aistudio: AIStudio;
+    // Added readonly modifier to match existing platform declarations if present
+    readonly aistudio: _AIStudio;
   }
 }
 
@@ -73,6 +75,7 @@ const App: React.FC = () => {
     const checkKey = async () => {
       if (typeof window.aistudio?.hasSelectedApiKey === 'function') {
         const selected = await window.aistudio.hasSelectedApiKey();
+        // Fallback to process.env.API_KEY check for local/direct-configured environments
         setHasKey(selected || !!process.env.API_KEY);
       }
     };
@@ -82,7 +85,8 @@ const App: React.FC = () => {
   const handleOpenKeySelector = async () => {
     if (typeof window.aistudio?.openSelectKey === 'function') {
       await window.aistudio.openSelectKey();
-      setHasKey(true); // Proceed as per race condition rule
+      // To mitigate race condition: assume selection was successful and proceed
+      setHasKey(true);
     }
   };
 
@@ -283,14 +287,19 @@ const App: React.FC = () => {
               }
           } catch (e: any) {
               if (e.name === 'AbortError' || ac.signal.aborted) break;
+              
               if (e.message === "MISSING_API_KEY") {
                   setHasKey(false);
-                  throw new Error(language === 'ko' ? "API 키가 설정되지 않았습니다. 상단 키 아이콘을 눌러주세요." : "API Key is not set. Please click the key icon.");
+                  throw new Error(language === 'ko' ? "API 키가 연결되지 않았습니다. 상단 키 아이콘을 눌러주세요." : "API Key is not connected. Please click the key icon in the header.");
               }
+              
               if (e.message === "ENTITY_NOT_FOUND") {
+                  // Reset key state and prompt for re-selection as per requirements
+                  setHasKey(false);
                   handleOpenKeySelector();
-                  throw new Error(language === 'ko' ? "API 키 프로젝트를 찾을 수 없습니다. 다시 선택해주세요." : "API key project not found. Please re-select.");
+                  throw new Error(language === 'ko' ? "프로젝트를 찾을 수 없습니다. API 키를 다시 선택해주세요." : "Project not found. Please re-select your API key.");
               }
+              
               console.error(e);
           }
           setCurrentAnalyzingId(null);
@@ -443,10 +452,10 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-4">
-           {/* API Key Selection Button */}
+           {/* API Key Connection Status/Button */}
            <button 
               onClick={handleOpenKeySelector}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${!hasKey ? 'bg-amber-50 border-amber-200 text-amber-600 animate-pulse' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${!hasKey ? 'bg-amber-50 border-amber-200 text-amber-600 shadow-sm animate-pulse' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
            >
              <Key className={`w-3.5 h-3.5 ${!hasKey ? 'text-amber-500' : 'text-slate-400'}`} />
              {!hasKey ? (language === 'ko' ? 'API 키 연결 필요' : 'Connect API Key') : (language === 'ko' ? 'API 키 연결됨' : 'API Connected')}
