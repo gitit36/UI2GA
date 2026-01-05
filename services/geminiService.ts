@@ -79,25 +79,39 @@ Button text handling:
 -------------------------------------------------
 D) EVENTLABEL RULES (CONTEXTUAL IDENTIFIER)
 -------------------------------------------------
-EVENTLABEL is a **variable, context-preserving identifier**
+EVENTLABEL is a **variable, context-aware identifier**
+used to capture dynamic or contextual information.
 
-Usage principles:
-- Put ALL contextual or variable information here
-- Free text is allowed
-- Prefer structured composition:
+Core principles:
+- EVENTLABEL is the PRIMARY place for variability.
+- Do NOT blindly copy visible UI text.
+- If the value can change by user, content, or time,
+  it MUST be treated as a variable.
+
+When to use VARIABLE values:
+- User input fields (search, text input, textarea)
+- Pattern-based or repeatable UI (lists, feeds, cards)
+- Content-driven UI (news, products, items)
+- Any label that differs per item, query, or user action
+
+Preferred composition:
+- Structured, underscore-separated format:
   {가변값1}_{가변값2}
 
 Examples:
+- {검색어}
 - {뉴스제목}
 - {가이드질문}_{뉴스제목}
-- {뉴스제목}_{질문내용}
+- {리스트항목명}
 - 뒤로가기_{컨텐츠명}
+- {사용자입력값}
 - {출처기사제목}
-- {사용자 피드백 내용}
 
 Rules:
-- Use {} ONLY to describe variables in the spec
-- Actual output must contain REAL VALUES, never placeholders
+- {} are used ONLY in the specification.
+- Actual output MUST contain real values, not placeholders.
+- If unsure whether a label is fixed or variable,
+  DEFAULT to VARIABLE.
 
 -------------------------------------------------
 E) DESCRIPTION
