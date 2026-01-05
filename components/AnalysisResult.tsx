@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ScreenAnalysis, Language, TaggingEvent, Screenshot } from '../types';
 import { getTexts } from '../utils/localization';
 import { Copy, Table as TableIcon, Code, Download, Trash2, Plus, Figma, AlertCircle, Check } from 'lucide-react';
@@ -16,7 +16,6 @@ interface AnalysisResultProps {
   hoveredItemNo: number | null;
 }
 
-// Robust detector for Figma plugin iframe environment
 function isInFigmaPluginIframe() {
   try {
     var inIframe = window.self !== window.top;
@@ -26,12 +25,10 @@ function isInFigmaPluginIframe() {
     var qsFlag = qs.indexOf("figmaPlugin=1") !== -1;
     return inIframe && (uaLooksFigma || qsFlag);
   } catch (e) {
-    // If cross-origin blocks window.top access, we're likely in a restricted iframe (plugin)
     return true;
   }
 }
 
-// Send SVG data directly to the Figma parent plugin
 function exportToFigma(svgText: string) {
   window.parent.postMessage(
     { type: "UI2GA_EXPORT_SVG", payload: { svgText: svgText } },
@@ -56,12 +53,15 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
   const [jsonText, setJsonText] = useState<string>("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<'markdown' | 'json' | 'figma' | null>(null);
+  const jsonTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const t = getTexts(language);
 
-  // Sync JSON text when analysis changes (from outside)
+  // Sync JSON text when analysis changes (only if not currently focused to avoid overwriting edits)
   useEffect(() => {
-    setJsonText(JSON.stringify({ events: analysis.events }, null, 2));
-    setJsonError(null);
+    if (document.activeElement !== jsonTextAreaRef.current) {
+      setJsonText(JSON.stringify({ events: analysis.events }, null, 2));
+      setJsonError(null);
+    }
   }, [analysis]);
 
   const generateMarkdown = () => {
@@ -115,23 +115,20 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
         try {
             const imgWidth = img.naturalWidth;
             const imgHeight = img.naturalHeight;
-            
-            // Layout Configuration
             const minTableWidth = 1000;
             const svgWidth = Math.max(imgWidth, minTableWidth);
-            
             const rowHeight = 40;
             const headerHeight = 50;
-            const tableY = imgHeight + 50; // 50px gap below image
+            const tableY = imgHeight + 50; 
             const tableHeight = headerHeight + (analysis.events.length * rowHeight);
-            const totalHeight = tableY + tableHeight + 50; // 50px bottom padding
+            const totalHeight = tableY + tableHeight + 50; 
             
             const colWidths = {
                 no: 50,
                 cat: 150,
                 act: 200,
                 lbl: 200,
-                desc: svgWidth - 600 // Fill remaining
+                desc: svgWidth - 600
             };
             
             const xPos = {
@@ -150,7 +147,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                   .cell { font-size: 14px; }
                   .grid { stroke: #e2e8f0; stroke-width: 1; }
                 </style>
-                
                 <g>
                   <image href="${activeImage.base64}" width="${imgWidth}" height="${imgHeight}" />
                   ${analysis.annotations.map(ann => {
@@ -158,11 +154,9 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     const by = ann.bbox.y * imgHeight;
                     const bw = ann.bbox.w * imgWidth;
                     const bh = ann.bbox.h * imgHeight;
-
                     const isItemOne = ann.item_no === 1;
                     const tagRectY = isItemOne ? by : by - 28;
                     const tagTextY = isItemOne ? by + 20 : by - 8;
-
                     return `
                     <rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="#ef4444" fill-opacity="0.1" stroke="#ef4444" stroke-width="3" />
                     <rect x="${bx}" y="${tagRectY}" width="32" height="28" fill="#ef4444" rx="4" />
@@ -170,7 +164,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                     `;
                   }).join('')}
                 </g>
-
                 <g transform="translate(0, ${tableY})">
                   <rect x="0" y="0" width="${svgWidth}" height="${tableHeight}" fill="white" stroke="#e2e8f0" rx="8" />
                   <rect x="0" y="0" width="${svgWidth}" height="${headerHeight}" fill="#f8fafc" rx="8" />
@@ -180,7 +173,6 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                   <text x="${xPos.lbl}" y="30" class="header">Label</text>
                   <text x="${xPos.desc}" y="30" class="header">Description</text>
                   <line x1="0" y1="${headerHeight}" x2="${svgWidth}" y2="${headerHeight}" class="grid" />
-
                   ${analysis.events.map((e, i) => {
                     const y = headerHeight + (i * rowHeight) + 25;
                     const lineY = headerHeight + ((i + 1) * rowHeight);
@@ -198,28 +190,21 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
             `.trim();
 
             var isFigma = isInFigmaPluginIframe();
-            console.log("[UI2GA] Export triggered", { mode: isFigma ? "figma_iframe" : "web_download" });
-
             if (isFigma) {
-                // Use specified helper for direct Figma integration
                 exportToFigma(svg);
-                
-                // Show localized success feedback
                 setCopyStatus('figma');
                 setTimeout(function() { setCopyStatus(null); }, 3000);
             } else {
-                // Standard browser download behavior
                 downloadFile(svg, "figma_export_" + (activeScreenshotId || "data") + ".svg", 'image/svg+xml');
             }
         } catch (e) {
-            console.error(e);
             alert("SVG Export Generation Failed");
         }
     };
   };
 
   const handleCellDoubleClick = (itemNo: number, field: keyof TaggingEvent, currentValue: any) => {
-    setEditingCell({ itemNo: itemNo, field: field });
+    setEditingCell({ itemNo, field });
     setTempCellValue(String(currentValue));
   };
 
@@ -231,9 +216,8 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      commitCellEdit();
-    }
+    if (e.key === 'Enter') commitCellEdit();
+    if (e.key === 'Escape') setEditingCell(null);
   };
 
   const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -269,14 +253,14 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
       <div className="h-12 border-b border-slate-200 flex items-center justify-between px-2 shrink-0">
          <div className="flex h-full">
              <button 
-                onClick={function() { setActiveTab('table'); }}
+                onClick={() => setActiveTab('table')}
                 className={"flex items-center gap-2 text-[11px] font-bold px-4 h-full border-b-2 transition-colors " + (activeTab === 'table' ? 'border-[#4f46e5] text-[#4f46e5]' : 'border-transparent text-slate-400 hover:text-slate-600')}
              >
                 <TableIcon className="w-3.5 h-3.5" />
                 {t.table}
              </button>
              <button 
-                onClick={function() { setActiveTab('json'); }}
+                onClick={() => setActiveTab('json')}
                 className={"flex items-center gap-2 text-[11px] font-bold px-4 h-full border-b-2 transition-colors " + (activeTab === 'json' ? 'border-[#4f46e5] text-[#4f46e5]' : 'border-transparent text-slate-400 hover:text-slate-600')}
              >
                 <Code className="w-3.5 h-3.5" />
@@ -284,18 +268,15 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
              </button>
          </div>
          <div className="flex items-center gap-3 pr-2">
-            <button 
-                onClick={exportFigmaSVG}
-                className="text-[10px] font-bold text-purple-500 bg-purple-50 px-2 py-1.5 rounded border border-purple-100 hover:bg-purple-100 flex items-center gap-1 transition-all active:scale-95"
-            >
+            <button onClick={exportFigmaSVG} className="text-[10px] font-bold text-purple-500 bg-purple-50 px-2 py-1.5 rounded border border-purple-100 hover:bg-purple-100 flex items-center gap-1 transition-all active:scale-95">
                 <Figma className="w-3 h-3" />
                 {t.exportFigma}
             </button>
             <div className="h-4 w-px bg-slate-200"></div>
             <div className="flex gap-2 text-[10px] text-slate-400 font-bold">
-                <button onClick={function() { downloadFile(generateCSV(), (activeScreenshotId || "data") + "_tagging.csv", 'text/csv'); }} className="cursor-pointer hover:text-slate-600 uppercase">CSV</button>
-                <button onClick={function() { downloadFile(generateCSV(), (activeScreenshotId || "data") + "_tagging.xlsx", 'application/vnd.ms-excel'); }} className="cursor-pointer hover:text-slate-600 uppercase">XLSX</button>
-                <button onClick={function() { downloadFile(jsonText, (activeScreenshotId || "data") + "_tagging.json", 'application/json'); }} className="cursor-pointer hover:text-slate-600 uppercase">JSON</button>
+                <button onClick={() => downloadFile(generateCSV(), (activeScreenshotId || "data") + "_tagging.csv", 'text/csv')} className="cursor-pointer hover:text-slate-600 uppercase">CSV</button>
+                <button onClick={() => downloadFile(generateCSV(), (activeScreenshotId || "data") + "_tagging.xlsx", 'application/vnd.ms-excel')} className="cursor-pointer hover:text-slate-600 uppercase">XLSX</button>
+                <button onClick={() => downloadFile(jsonText, (activeScreenshotId || "data") + "_tagging.json", 'application/json')} className="cursor-pointer hover:text-slate-600 uppercase">JSON</button>
             </div>
          </div>
       </div>
@@ -306,17 +287,13 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
           </span>
           <div className="flex items-center gap-2">
               {activeTab === 'table' && (
-                <button 
-                    onClick={onAddRow}
-                    className="text-[10px] font-bold bg-[#4f46e5] text-white px-3 py-1.5 rounded hover:bg-indigo-700 transition-colors flex items-center gap-1"
-                >
+                <button onClick={onAddRow} className="text-[10px] font-bold bg-[#4f46e5] text-white px-3 py-1.5 rounded hover:bg-indigo-700 transition-colors flex items-center gap-1">
                     <Plus className="w-3 h-3" /> {t.addRow}
                 </button>
               )}
               <button 
                 onClick={handleUnifiedCopy}
                 className={"p-2 bg-white border rounded transition-colors shadow-sm flex items-center justify-center " + (copyStatus && copyStatus !== 'figma' ? 'border-green-500 text-green-600 bg-green-50' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}
-                title={activeTab === 'table' ? t.copyMarkdown : t.copyJSON}
               >
                   {(copyStatus && copyStatus !== 'figma') ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               </button>
@@ -338,32 +315,20 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                 </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                {analysis.events.map((event) => {
-                    return (
-                        <tr 
-                            key={event.item_no} 
-                            className={"hover:bg-slate-50 transition-colors group " + (hoveredItemNo === event.item_no ? 'bg-indigo-50' : '')}
-                        >
-                        <td className="px-2 py-3 text-[11px] text-slate-400 text-center font-bold">
-                            {event.item_no}
-                        </td>
-                        
+                {analysis.events.map((event) => (
+                    <tr key={event.item_no} className={"hover:bg-slate-50 transition-colors group " + (hoveredItemNo === event.item_no ? 'bg-indigo-50' : '')}>
+                        <td className="px-2 py-3 text-[11px] text-slate-400 text-center font-bold">{event.item_no}</td>
                         {['event_category', 'event_action', 'event_label', 'description'].map((f) => {
-                            var field = f as keyof TaggingEvent;
-                            var isEditing = editingCell && editingCell.itemNo === event.item_no && editingCell.field === field;
-                            
+                            const field = f as keyof TaggingEvent;
+                            const isEditing = editingCell && editingCell.itemNo === event.item_no && editingCell.field === field;
                             return (
-                                <td 
-                                    key={field}
-                                    onDoubleClick={function() { handleCellDoubleClick(event.item_no, field, event[field]); }}
-                                    className={"px-3 py-3 text-[11px] border-l border-slate-50 cursor-text " + (field === 'event_action' ? 'text-[#2563eb] font-bold' : field === 'event_label' ? 'text-[#9333ea] font-bold' : 'text-slate-800')}
-                                >
+                                <td key={field} onDoubleClick={() => handleCellDoubleClick(event.item_no, field, event[field])} className={"px-3 py-3 text-[11px] border-l border-slate-50 cursor-text " + (field === 'event_action' ? 'text-[#2563eb] font-bold' : field === 'event_label' ? 'text-[#9333ea] font-bold' : 'text-slate-800')}>
                                     {isEditing ? (
                                         <input 
                                             autoFocus
                                             className="w-full bg-indigo-50 border border-indigo-200 outline-none px-1 rounded shadow-sm text-slate-900"
                                             value={tempCellValue}
-                                            onChange={function(e) { setTempCellValue(e.target.value); }}
+                                            onChange={(e) => setTempCellValue(e.target.value)}
                                             onBlur={commitCellEdit}
                                             onKeyDown={handleKeyDown}
                                         />
@@ -373,15 +338,13 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
                                 </td>
                             );
                         })}
-
                         <td className="px-2 py-3 text-center">
-                            <button onClick={function() { onDeleteRow(event.item_no); }} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
+                            <button onClick={() => onDeleteRow(event.item_no)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
                                 <Trash2 className="w-3.5 h-3.5" />
                             </button>
                         </td>
-                        </tr>
-                    );
-                })}
+                    </tr>
+                ))}
                 </tbody>
             </table>
           </div>
@@ -389,6 +352,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
           <div className="absolute inset-0 flex flex-col">
              <div className="flex-1 relative">
                 <textarea
+                    ref={jsonTextAreaRef}
                     className={"w-full h-full p-4 text-[11px] font-mono leading-relaxed outline-none resize-none " + (jsonError ? 'bg-red-50' : 'bg-slate-50 text-slate-700')}
                     value={jsonText}
                     onChange={handleJsonChange}
