@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ScreenAnalysis, Language, TaggingEvent, Screenshot } from '../types';
 import { getTexts } from '../utils/localization';
@@ -16,6 +15,7 @@ interface AnalysisResultProps {
   hoveredItemNo: number | null;
 }
 
+// Robust detector for Figma plugin iframe environment
 function isInFigmaPluginIframe() {
   try {
     var inIframe = window.self !== window.top;
@@ -29,6 +29,7 @@ function isInFigmaPluginIframe() {
   }
 }
 
+// Send SVG data directly to the Figma parent plugin
 function exportToFigma(svgText: string) {
   window.parent.postMessage(
     { type: "UI2GA_EXPORT_SVG", payload: { svgText: svgText } },
@@ -56,8 +57,9 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
   const jsonTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const t = getTexts(language);
 
-  // Sync JSON text when analysis changes (only if not currently focused to avoid overwriting edits)
+  // Sync JSON text when analysis changes (from outside)
   useEffect(() => {
+    // Only update the JSON text if the user isn't currently focused on it to avoid overwriting manual edits
     if (document.activeElement !== jsonTextAreaRef.current) {
       setJsonText(JSON.stringify({ events: analysis.events }, null, 2));
       setJsonError(null);
@@ -204,7 +206,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({
   };
 
   const handleCellDoubleClick = (itemNo: number, field: keyof TaggingEvent, currentValue: any) => {
-    setEditingCell({ itemNo, field });
+    setEditingCell({ itemNo: itemNo, field: field });
     setTempCellValue(String(currentValue));
   };
 
