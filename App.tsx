@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Loader2, LayoutDashboard, AlertCircle, Play, Globe, Plus, FileJson, BookOpen, PanelLeft, Trash2, Check, X, Square, Figma } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
@@ -457,6 +456,11 @@ const App: React.FC = () => {
               <p className="text-slate-500 max-w-xl mx-auto">{t.uploadDesc}</p>
             </div>
             <div className="w-full max-w-3xl"><ImageUploader onImagesSelected={handleImagesSelected} isLoading={isAnalyzing} language={language} /></div>
+            <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
+               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h4 className="font-bold text-slate-900 mb-2">{t.features.detection.title}</h4><p className="text-xs text-slate-500 leading-relaxed">{t.features.detection.desc}</p></div>
+               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h4 className="font-bold text-slate-900 mb-2">{t.features.selection.title}</h4><p className="text-xs text-slate-500 leading-relaxed">{t.features.selection.desc}</p></div>
+               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h4 className="font-bold text-slate-900 mb-2">{t.features.multi.title}</h4><p className="text-xs text-slate-500 leading-relaxed">{t.features.multi.desc}</p></div>
+            </div>
           </div>
         ) : (
           <div className="flex h-full p-4 md:p-2 xl:p-4 pb-8 md:pb-8 xl:pb-8 overflow-hidden relative">
@@ -484,9 +488,10 @@ const App: React.FC = () => {
                                     <div className="w-10 h-10 shrink-0 rounded bg-slate-100 border border-slate-200 overflow-hidden"><img src={s.base64} className="w-full h-full object-cover" alt="thumb" /></div>
                                     <div className="flex-1 min-w-0 pr-4">
                                         <p className={`text-[11px] font-bold truncate ${activeScreenshotId === s.id ? 'text-[#4f46e5]' : 'text-slate-700'}`}>{s.name}</p>
+                                        <div className="flex items-center gap-1.5"><p className="text-[9px] text-slate-400 font-bold font-mono tracking-wider">{s.id}</p></div>
                                     </div>
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-                                         {currentAnalyzingId === s.id ? <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse ring-2 ring-yellow-100"></div> : canceledIds.has(s.id) ? <div className="w-2 h-2 rounded-full bg-red-500 ring-2 ring-red-100"></div> : results[s.id] ? <div className="w-2 h-2 rounded-full bg-green-500 ring-2 ring-green-100"></div> : null}
+                                         {currentAnalyzingId === s.id ? <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse ring-2 ring-yellow-100" title="Analyzing..."></div> : canceledIds.has(s.id) ? <div className="w-2 h-2 rounded-full bg-red-500 ring-2 ring-red-100" title="Canceled/Failed"></div> : results[s.id] ? <div className="w-2 h-2 rounded-full bg-green-500 ring-2 ring-green-100" title="Completed"></div> : null}
                                     </div>
                                     <div className={`absolute right-2 top-1/2 -translate-y-1/2 items-center gap-1 z-10 ${screenshotDeleteId === s.id ? 'flex' : 'hidden group-hover:flex'}`} onClick={(e) => e.stopPropagation()}>
                                         {screenshotDeleteId === s.id ? (
@@ -502,17 +507,17 @@ const App: React.FC = () => {
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col flex-1 overflow-hidden">
                         <div className="px-4 py-3 border-b border-slate-100 bg-white shrink-0"><span className="text-xs font-bold text-slate-700 flex items-center gap-2"><FileJson className="w-4 h-4 text-slate-400"/> {t.contextRules}</span></div>
                         <div className="p-4 flex flex-col gap-5 overflow-y-auto custom-scrollbar flex-1">
-                            <div className="flex flex-col gap-1.5"><label className="text-[11px] font-bold text-slate-700">{t.customRulesTitle}</label><textarea className="w-full text-xs p-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500 outline-none resize-none h-24 bg-white text-slate-800" placeholder={t.customRulesPlaceholder} value={activeContext.customRules} onChange={(e) => handleContextChange('customRules', e.target.value)} /></div>
-                            <div className="flex flex-col gap-1.5"><label className="text-[11px] font-bold text-slate-700">{t.existingTagsTitle}</label><textarea className="w-full text-xs p-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500 outline-none resize-none h-24 bg-white text-slate-800" placeholder={t.existingTagsPlaceholder} value={activeContext.existingTags} onChange={(e) => handleContextChange('existingTags', e.target.value)} /></div>
+                            <div className="flex flex-col gap-1.5"><label className="text-[11px] font-bold text-slate-700">{t.customRulesTitle}</label><textarea className="w-full text-xs p-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500 outline-none resize-none h-24 bg-white text-slate-800 placeholder:text-slate-300" placeholder={t.customRulesPlaceholder} value={activeContext.customRules} onChange={(e) => handleContextChange('customRules', e.target.value)} /></div>
+                            <div className="flex flex-col gap-1.5"><label className="text-[11px] font-bold text-slate-700">{t.existingTagsTitle}</label><textarea className="w-full text-xs p-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500 outline-none resize-none h-24 bg-white text-slate-800 placeholder:text-slate-300" placeholder={t.existingTagsPlaceholder} value={activeContext.existingTags} onChange={(e) => handleContextChange('existingTags', e.target.value)} /></div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            {/* Improved Overlay logic - only covers the workspace on small screens when sidebar is open */}
+            {/* Optimized overlay for mobile/small screens that doesn't block large desktop layouts */}
             {isSidebarOpen && (
               <div 
-                className="fixed inset-0 z-30 bg-black/10 xl:hidden" 
+                className="fixed inset-0 z-30 bg-black/5 xl:hidden" 
                 onClick={() => setIsSidebarOpen(false)} 
               />
             )}
@@ -521,7 +526,7 @@ const App: React.FC = () => {
                 <div className="flex-1 flex flex-col gap-4 md:gap-2 xl:gap-4 min-w-0 overflow-hidden">
                     <div className="flex justify-between items-center bg-white h-14 px-6 md:px-3 xl:px-6 rounded-xl border border-slate-200 shadow-sm shrink-0">
                         <span className={`text-xs font-medium truncate ${selectedIds.size === 0 ? 'text-red-500' : 'text-slate-600'}`}>{analysisFeedback || getAnalyzeSummary()}</span>
-                        <button onClick={handleAnalyze} disabled={!canAnalyze && !isAnalyzing} className={`flex items-center justify-center gap-2 px-6 py-2 rounded-lg font-bold text-sm text-white transition-all shrink-0 w-48 ${isAnalyzing ? 'bg-rose-500 hover:bg-rose-600' : canAnalyze ? 'bg-[#4f46e5] hover:bg-indigo-700 active:scale-95' : 'bg-slate-300 cursor-not-allowed'}`}>
+                        <button onClick={handleAnalyze} disabled={!canAnalyze && !isAnalyzing} className={`flex items-center justify-center gap-2 px-6 py-2 rounded-lg font-bold text-sm text-white transition-all shrink-0 w-48 ${isAnalyzing ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-200 shadow-sm' : canAnalyze ? 'bg-[#4f46e5] hover:bg-indigo-700 active:scale-95 shadow-indigo-200 shadow-sm' : 'bg-slate-300 cursor-not-allowed'}`}>
                             {isAnalyzing ? <><Square className="w-3 h-3 fill-current" /><span>{t.analyzingBtn}</span><span className="w-4 text-left inline-block">{analyzingDots}</span></> : <><Play className="w-4 h-4 fill-current" /><span>{t.analyzeBtn}</span></>}
                         </button>
                     </div>
